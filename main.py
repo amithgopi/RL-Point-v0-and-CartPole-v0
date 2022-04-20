@@ -8,12 +8,14 @@ import time
 from utils import *
 from torch import nn
 from agent import Agent
+import matplotlib.pyplot as plt
 
 from models.mlp_critic import Value
 from models.mlp_policy_disc import DiscretePolicy
 
 from point_env import PointEnv
 from solutions.point_mass_solutions import estimate_net_grad
+from solutions.cartpole_solutions import *
 
 parser = argparse.ArgumentParser(description='Pytorch Policy Gradient')
 parser.add_argument('--env-name', default="Point-v0", metavar='G',
@@ -85,7 +87,7 @@ if args.env_name == 'Point-v0':
               running_state=None, num_threads=args.num_threads)
 else:
     agent = Agent(env, args.env_name, device, policy_net, theta, custom_reward=None,
-                  running_state=running_state, num_threads=args.num_threads)
+                  running_state=None, num_threads=args.num_threads)
 
 
 def update_params(batch, i_iter):
@@ -107,23 +109,28 @@ def update_params(batch, i_iter):
         2. Use 1. to update the policy
             pg_step(policy_net, value_net, optimizer_policy, optimizer_value, states, actions, values_from_1)
         """
+        # rtg = estimate_rtg(rewards, masks, args.gamma, device)
+        # policies = policy_net.get_log_prob(states, actions)
+        pg_step(policy_net, value_net, optimizer_policy, optimizer_value, states, actions, masks, rewards, args.gamma, device)
 
     if args.env_name == 'Point-v0':
         """get values estimates from the trajectories"""
         net_grad = estimate_net_grad(rewards, masks,states,actions,args.gamma,theta,device)
+        
 
         """update policy parameters"""
-        print(net_grad)
+        # print(net_grad)
         theta += args.learning_rate * net_grad
 
 
 
 def main_loop():
     shouldRender = args.render
+    undiscountedReward = []
     for i_iter in range(args.max_iter_num):
         # shouldRender = ((i_iter % 50) == 0)
         if (i_iter+1) % 500 == 0: 
-            input()
+            # input()
             shouldRender = True
         """generate multiple trajectories that reach the minimum batch_size"""
         batch, log = agent.collect_samples(args.min_batch_size, render=shouldRender)
@@ -131,8 +138,9 @@ def main_loop():
         t0 = time.time()
         update_params(batch, i_iter)
         t1 = time.time()
+        undiscountedReward.append(np.sum(batch.reward))
         """evaluate with determinstic action (remove noise for exploration) For cartpole,set mean action to False"""
-        _, log_eval = agent.collect_samples(args.eval_batch_size, mean_action=True)
+        _, log_eval = agent.collect_samples(args.eval_batch_size, mean_action=False if args.env_name == 'CartPole-v0' else True)
         t2 = time.time()
 
         if i_iter % args.log_interval == 0:
@@ -147,5 +155,9 @@ def main_loop():
 
         """clean up gpu memory"""
         torch.cuda.empty_cache()
+    plt.plot(undiscountedReward)
+    plt.ylabel("Cumulative Reward Per Iteration")
+    plt.xlabel("Iterations")
+    plt.show()
 
 main_loop()

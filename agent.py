@@ -44,7 +44,7 @@ def collect_samples(pid, queue, env, env_name, policy, theta, custom_reward,
         reward_episode = 0
 
         for t in range(10000):
-            state_var = tensor(state).unsqueeze(0)
+            state_var = tensor(state).type(torch.float64).unsqueeze(0)
             with torch.no_grad():
                 if env_name == 'CartPole-v0':
                     if mean_action:
